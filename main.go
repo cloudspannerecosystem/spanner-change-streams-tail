@@ -35,17 +35,17 @@ func usage() {
   %s [OPTIONS]
 
 Options:
-  -p, --project=  (required) GCP Project ID
-  -i, --instance= (required) Cloud Spanner Instance ID
-  -d, --database= (required) Cloud Spanner Database ID
-  -s, --stream=   (required) Cloud Spanner Change Stream ID
-  -f, --format=              Output format [text|json] (default: text)
-      --start=               Start timestamp with RFC3339 format (default: current timestamp)
-      --end=                 End timestamp with RFC3339 format (default: none)
-      --visualize-partitions Visualize the change stream partitions in Graphviz DOT
+  -p, --project=  (required)   GCP Project ID
+  -i, --instance= (required)   Cloud Spanner Instance ID
+  -d, --database= (required)   Cloud Spanner Database ID
+  -s, --stream=   (required)   Cloud Spanner Change Stream ID
+  -f, --format=                Output format [text|json] (default: text)
+      --start=                 Start timestamp with RFC3339 format (default: current timestamp)
+      --end=                   End timestamp with RFC3339 format (default: none)
+      --visualize-partitions   Visualize the change stream partitions in Graphviz DOT
 
 Help Options:
-  -h, -help                  Show this help message
+  -h, -help                    Show this help message
 `, command)
 }
 
