@@ -1,4 +1,4 @@
-module spanner-change-streams-tail
+module github.com/cloudspannerecosystem/spanner-change-streams-tail
 
 go 1.16
 
