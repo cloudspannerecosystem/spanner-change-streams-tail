@@ -19,25 +19,20 @@ package main
 import (
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"time"
 )
 
-const rootPartitionToken = "root"
+const (
+	rootPartitionToken = "root"
+)
 
 type Partition struct {
 	Token          string
 	StartTimestamp time.Time
 	RecordSequence string
 	Parents        []*Partition
-}
-
-func (p *Partition) ShortenToken() string {
-	length := 20
-	if len(p.Token) < 20 {
-		length = len(p.Token)
-	}
-	return p.Token[0:length]
 }
 
 // Assert that PartitionVisualizer implements Consumer.
@@ -104,15 +99,30 @@ func (v *PartitionVisualizer) Draw() {
 	fmt.Fprintf(v.out, "digraph {\n")
 	fmt.Fprintf(v.out, "  node [shape=record];\n")
 	for _, partition := range v.partitions {
-		t := partition.ShortenToken()
-		fmt.Fprintf(v.out, `  "%s" [label="{token|start_timestamp|record_sequence}|{{%s}|{%s}|{%s}}"];`, t, t, partition.StartTimestamp.Format(time.RFC3339), partition.RecordSequence)
+		t := partition.Token
+		var timestamp string
+		if !partition.StartTimestamp.IsZero() {
+			timestamp = partition.StartTimestamp.Format(time.RFC3339)
+		}
+		fmt.Fprintf(v.out, `  "%s" [label="{token|start_timestamp|record_sequence}|{{%s}|{%s}|{%s}}"];`, t, t, timestamp, partition.RecordSequence)
 		fmt.Fprintln(v.out, "")
 	}
-	for _, partition := range v.partitions {
+	for _, partition := range sortPartitions(v.partitions) {
 		for _, parent := range partition.Parents {
-			fmt.Fprintf(v.out, `  "%s" -> "%s"`, parent.ShortenToken(), partition.ShortenToken())
+			fmt.Fprintf(v.out, `  "%s" -> "%s"`, parent.Token, partition.Token)
 			fmt.Fprintln(v.out, "")
 		}
 	}
 	fmt.Fprintf(v.out, "}\n")
+}
+
+func sortPartitions(partitionsMap map[string]*Partition) []*Partition {
+	var partitions []*Partition
+	for _, p := range partitionsMap {
+		partitions = append(partitions, p)
+	}
+	sort.Slice(partitions, func(i, j int) bool {
+		return partitions[i].Token < partitions[j].Token
+	})
+	return partitions
 }
