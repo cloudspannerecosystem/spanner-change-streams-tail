@@ -1,5 +1,7 @@
 # spanner-change-streams-tail
 
+[![run-tests](https://github.com/cloudspannerecosystem/spanner-change-streams-tail/actions/workflows/run-tests.yaml/badge.svg)](https://github.com/cloudspannerecosystem/spanner-change-streams-tail/actions/workflows/run-tests.yaml)
+
 A handy tool to tail Cloud Spanner Change Streams.
 
 ## Install
