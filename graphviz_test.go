@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type partitionResult struct {
@@ -36,7 +38,7 @@ func TestPartitionVisualizer(t *testing.T) {
 							{
 								ChildPartitionsRecords: []*ChildPartitionsRecord{
 									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T18:00:00+09:00"),
+										StartTimestamp: mustParseTime(t, "2022-12-04T18:00:00Z"),
 										RecordSequence: "00000001",
 										ChildPartitions: []*ChildPartition{
 											{
@@ -57,7 +59,7 @@ func TestPartitionVisualizer(t *testing.T) {
 							{
 								ChildPartitionsRecords: []*ChildPartitionsRecord{
 									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00+09:00"),
+										StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00Z"),
 										RecordSequence: "00000001",
 										ChildPartitions: []*ChildPartition{
 											{
@@ -67,7 +69,7 @@ func TestPartitionVisualizer(t *testing.T) {
 										},
 									},
 									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00+09:00"),
+										StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00Z"),
 										RecordSequence: "00000002",
 										ChildPartitions: []*ChildPartition{
 											{
@@ -88,7 +90,7 @@ func TestPartitionVisualizer(t *testing.T) {
 							{
 								ChildPartitionsRecords: []*ChildPartitionsRecord{
 									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00+09:00"),
+										StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00Z"),
 										RecordSequence: "00000001",
 										ChildPartitions: []*ChildPartition{
 											{
@@ -109,7 +111,7 @@ func TestPartitionVisualizer(t *testing.T) {
 							{
 								ChildPartitionsRecords: []*ChildPartitionsRecord{
 									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00+09:00"),
+										StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00Z"),
 										RecordSequence: "00000001",
 										ChildPartitions: []*ChildPartition{
 											{
@@ -132,10 +134,10 @@ func TestPartitionVisualizer(t *testing.T) {
 			},
 			expected: `digraph {
   node [shape=record];
-  "a" [label="{token|start_timestamp|record_sequence}|{{a}|{2022-12-04T18:00:00+09:00}|{00000001}}"];
-  "b" [label="{token|start_timestamp|record_sequence}|{{b}|{2022-12-04T19:00:00+09:00}|{00000001}}"];
-  "c" [label="{token|start_timestamp|record_sequence}|{{c}|{2022-12-04T19:00:00+09:00}|{00000002}}"];
-  "d" [label="{token|start_timestamp|record_sequence}|{{d}|{2022-12-04T20:00:00+09:00}|{00000001}}"];
+  "a" [label="{token|start_timestamp|record_sequence}|{{a}|{2022-12-04T18:00:00Z}|{00000001}}"];
+  "b" [label="{token|start_timestamp|record_sequence}|{{b}|{2022-12-04T19:00:00Z}|{00000001}}"];
+  "c" [label="{token|start_timestamp|record_sequence}|{{c}|{2022-12-04T19:00:00Z}|{00000002}}"];
+  "d" [label="{token|start_timestamp|record_sequence}|{{d}|{2022-12-04T20:00:00Z}|{00000001}}"];
   "root" [label="{token|start_timestamp|record_sequence}|{{root}|{}|{}}"];
   "root" -> "a"
   "a" -> "b"
@@ -154,15 +156,15 @@ func TestPartitionVisualizer(t *testing.T) {
 			}
 			visualizer.Draw()
 
-			if out.String() != test.expected {
-				t.Errorf("visualizer got = %q, but want = %q", out.String(), test.expected)
+			if diff := cmp.Diff(out.String(), test.expected); diff != "" {
+				t.Errorf("visualizer has diff = %v", diff)
 			}
 		})
 	}
 }
 
 func mustParseTime(t *testing.T, s string) time.Time {
-	parsed, err := time.Parse(time.RFC3339, s)
+	parsed, err := time.ParseInLocation(time.RFC3339, s, time.UTC)
 	if err != nil {
 		t.Fatalf("failed to parse time: %v", err)
 	}

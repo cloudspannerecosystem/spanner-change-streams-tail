@@ -98,16 +98,16 @@ func (v *PartitionVisualizer) Consume(partitionToken string, result *ReadResult)
 func (v *PartitionVisualizer) Draw() {
 	fmt.Fprintf(v.out, "digraph {\n")
 	fmt.Fprintf(v.out, "  node [shape=record];\n")
-	for _, partition := range v.partitions {
-		t := partition.Token
+	partitions := sortPartitions(v.partitions)
+	for _, partition := range partitions {
 		var timestamp string
 		if !partition.StartTimestamp.IsZero() {
 			timestamp = partition.StartTimestamp.Format(time.RFC3339)
 		}
-		fmt.Fprintf(v.out, `  "%s" [label="{token|start_timestamp|record_sequence}|{{%s}|{%s}|{%s}}"];`, t, t, timestamp, partition.RecordSequence)
+		fmt.Fprintf(v.out, `  "%s" [label="{token|start_timestamp|record_sequence}|{{%s}|{%s}|{%s}}"];`, partition.Token, partition.Token, timestamp, partition.RecordSequence)
 		fmt.Fprintln(v.out, "")
 	}
-	for _, partition := range sortPartitions(v.partitions) {
+	for _, partition := range partitions {
 		for _, parent := range partition.Parents {
 			fmt.Fprintf(v.out, `  "%s" -> "%s"`, parent.Token, partition.Token)
 			fmt.Fprintln(v.out, "")
