@@ -34,4 +34,4 @@ jobs:
           TEST_PROJECT_ID: ${{ secrets.TEST_PROJECT_ID }}
           TEST_INSTANCE_ID: ${{ secrets.TEST_INSTANCE_ID }}
           TEST_DATABASE_ID: ${{ secrets.TEST_DATABASE_ID }}
-          TEST_CREDENTIAL: ${{ secrets.TEST_CREDENTIAL }}
+          TEST_CREDENTIAL_BASE64: ${{ secrets.TEST_CREDENTIAL_BASE64 }}
