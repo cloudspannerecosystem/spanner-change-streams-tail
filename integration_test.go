@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"sync/atomic"
@@ -34,20 +35,20 @@ import (
 )
 
 const (
-	envTestProjectID  = "TEST_PROJECT_ID"
-	envTestInstanceID = "TEST_INSTANCE_ID"
-	envTestDatabaseID = "TEST_DATABASE_ID"
-	envTestCredential = "TEST_CREDENTIAL"
-	timeoutPerTest    = time.Minute * 3
+	envTestProjectID        = "TEST_PROJECT_ID"
+	envTestInstanceID       = "TEST_INSTANCE_ID"
+	envTestDatabaseID       = "TEST_DATABASE_ID"
+	envTestCredentialBase64 = "TEST_CREDENTIAL_BASE64"
+	timeoutPerTest          = time.Minute * 3
 )
 
 var (
 	skipIntegrateTest bool
 
-	testProjectID  string
-	testInstanceID string
-	testDatabaseID string
-	testCredential string
+	testProjectID        string
+	testInstanceID       string
+	testDatabaseID       string
+	testCredentialBase64 string
 
 	tableIDCounter  uint32
 	streamIDCounter uint32
@@ -67,7 +68,7 @@ func initialize() {
 	testProjectID = os.Getenv(envTestProjectID)
 	testInstanceID = os.Getenv(envTestInstanceID)
 	testDatabaseID = os.Getenv(envTestDatabaseID)
-	testCredential = os.Getenv(envTestCredential)
+	testCredentialBase64 = os.Getenv(envTestCredentialBase64)
 }
 
 func generateUniqueTableID() string {
@@ -89,8 +90,12 @@ type setupResult struct {
 
 func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 	var options []option.ClientOption
-	if testCredential != "" {
-		options = append(options, option.WithCredentialsJSON([]byte(testCredential)))
+	if testCredentialBase64 != "" {
+		credential, err := base64.StdEncoding.DecodeString(testCredentialBase64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid base64 encoded credential: %v", err)
+		}
+		options = append(options, option.WithCredentialsJSON(credential))
 	}
 	adminClient, err := adminapi.NewDatabaseAdminClient(ctx, options...)
 	if err != nil {
