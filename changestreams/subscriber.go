@@ -25,6 +25,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/option"
 )
 
 // ReadResult is the result of the read change records from the partition.
@@ -120,18 +121,18 @@ type Config struct {
 }
 
 // NewSubscriber creates a new subscriber.
-func NewSubscriber(ctx context.Context, projectID, instanceID, databaseID, streamID string) (*Subscriber, error) {
-	return NewSubscriberWithConfig(ctx, projectID, instanceID, databaseID, streamID, &Config{})
+func NewSubscriber(ctx context.Context, projectID, instanceID, databaseID, streamID string, opts ...option.ClientOption) (*Subscriber, error) {
+	return NewSubscriberWithConfig(ctx, projectID, instanceID, databaseID, streamID, &Config{}, opts...)
 }
 
 // NewSubscriberWithConfig creates a new subscriber with the given configuration.
-func NewSubscriberWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config *Config) (*Subscriber, error) {
+func NewSubscriberWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config *Config, opts ...option.ClientOption) (*Subscriber, error) {
 	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
 	client, err := spanner.NewClientWithConfig(ctx, dbPath, spanner.ClientConfig{
 		SessionPoolConfig: spanner.SessionPoolConfig{
 			WriteSessions: 0,
 		},
-	})
+	}, opts...)
 	if err != nil {
 		return nil, err
 	}

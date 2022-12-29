@@ -83,10 +83,11 @@ func generateUniqueStreamID() string {
 }
 
 type setupResult struct {
-	client   *spanner.Client
-	tableID  string
-	streamID string
-	tearDown func() error
+	client        *spanner.Client
+	clientOptions []option.ClientOption
+	tableID       string
+	streamID      string
+	tearDown      func() error
 }
 
 func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
@@ -153,10 +154,11 @@ func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 	}
 
 	return &setupResult{
-		client:   client,
-		tearDown: tearDown,
-		tableID:  tableID,
-		streamID: streamID,
+		client:        client,
+		clientOptions: options,
+		tearDown:      tearDown,
+		tableID:       tableID,
+		streamID:      streamID,
 	}, nil
 }
 
@@ -301,7 +303,7 @@ func TestSubscriber(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
-			subscriber, err := changestreams.NewSubscriber(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID)
+			subscriber, err := changestreams.NewSubscriber(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID, setupResult.clientOptions...)
 			if err != nil {
 				t.Fatalf("failed to create a subscriber: %v", err)
 			}
