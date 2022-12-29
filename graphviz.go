@@ -22,6 +22,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams"
 )
 
 const (
@@ -35,8 +37,8 @@ type Partition struct {
 	Parents        []*Partition
 }
 
-// Assert that PartitionVisualizer implements Consumer.
-var _ Consumer = (*PartitionVisualizer)(nil)
+// Assert that PartitionVisualizer implements changestreams.Consumer.
+var _ changestreams.Consumer = (*PartitionVisualizer)(nil)
 
 type PartitionVisualizer struct {
 	partitions map[string]*Partition
@@ -54,7 +56,7 @@ func NewPartitionVisualizer(out io.Writer) *PartitionVisualizer {
 	}
 }
 
-func (v *PartitionVisualizer) Consume(partitionToken string, result *ReadResult) error {
+func (v *PartitionVisualizer) Consume(result *changestreams.ReadResult) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 

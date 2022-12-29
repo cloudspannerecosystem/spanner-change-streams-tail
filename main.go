@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/spanner"
+	"github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams"
 )
 
 func usage() {
@@ -111,19 +111,15 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go handleInterrupt(cancel)
 
-	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
-	client, err := spanner.NewClientWithConfig(ctx, dbPath, spanner.ClientConfig{
-		SessionPoolConfig: spanner.SessionPoolConfig{
-			MinOpened:     1,
-			WriteSessions: 0,
-		},
-	})
-	if err != nil {
-		exitf("failed to create spanner client: %v", err)
+	config := changestreams.Config{
+		StartTimestamp: startTimestamp,
+		EndTimestamp:   endTimestamp,
 	}
-	defer client.Close()
-
-	subscriber := NewSubscriber(client, streamID, startTimestamp, endTimestamp)
+	subscriber, err := changestreams.NewSubscriberWithConfig(ctx, projectID, instanceID, databaseID, streamID, &config)
+	if err != nil {
+		exitf("failed to create a subscriber: %v", err)
+	}
+	defer subscriber.Close()
 
 	if visualizePartitions {
 		fmt.Fprintf(os.Stderr, "Reading the stream and analyzing partitions...\n\n")

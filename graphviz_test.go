@@ -5,23 +5,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams"
 	"github.com/google/go-cmp/cmp"
 )
 
-type partitionResult struct {
-	partitionToken string
-	result         *ReadResult
-}
-
 func TestPartitionVisualizer(t *testing.T) {
 	for _, test := range []struct {
-		desc             string
-		partitionResults []*partitionResult
-		expected         string
+		desc        string
+		readResults []*changestreams.ReadResult
+		expected    string
 	}{
 		{
-			desc:             "empty partition results",
-			partitionResults: []*partitionResult{},
+			desc:        "empty partition results",
+			readResults: []*changestreams.ReadResult{},
 			expected: `digraph {
   node [shape=record];
   "root" [label="{token|start_timestamp|record_sequence}|{{root}|{}|{}}"];
@@ -30,21 +26,19 @@ func TestPartitionVisualizer(t *testing.T) {
 		},
 		{
 			desc: "simple split/join results",
-			partitionResults: []*partitionResult{
+			readResults: []*changestreams.ReadResult{
 				{
-					partitionToken: "",
-					result: &ReadResult{
-						ChangeRecords: []*ChangeRecord{
-							{
-								ChildPartitionsRecords: []*ChildPartitionsRecord{
-									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T18:00:00Z"),
-										RecordSequence: "00000001",
-										ChildPartitions: []*ChildPartition{
-											{
-												Token:                 "a",
-												ParentPartitionTokens: []string{},
-											},
+					PartitionToken: "",
+					ChangeRecords: []*changestreams.ChangeRecord{
+						{
+							ChildPartitionsRecords: []*changestreams.ChildPartitionsRecord{
+								{
+									StartTimestamp: mustParseTime(t, "2022-12-04T18:00:00Z"),
+									RecordSequence: "00000001",
+									ChildPartitions: []*changestreams.ChildPartition{
+										{
+											Token:                 "a",
+											ParentPartitionTokens: []string{},
 										},
 									},
 								},
@@ -53,29 +47,27 @@ func TestPartitionVisualizer(t *testing.T) {
 					},
 				},
 				{
-					partitionToken: "a",
-					result: &ReadResult{
-						ChangeRecords: []*ChangeRecord{
-							{
-								ChildPartitionsRecords: []*ChildPartitionsRecord{
-									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00Z"),
-										RecordSequence: "00000001",
-										ChildPartitions: []*ChildPartition{
-											{
-												Token:                 "b",
-												ParentPartitionTokens: []string{"a"},
-											},
+					PartitionToken: "a",
+					ChangeRecords: []*changestreams.ChangeRecord{
+						{
+							ChildPartitionsRecords: []*changestreams.ChildPartitionsRecord{
+								{
+									StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00Z"),
+									RecordSequence: "00000001",
+									ChildPartitions: []*changestreams.ChildPartition{
+										{
+											Token:                 "b",
+											ParentPartitionTokens: []string{"a"},
 										},
 									},
-									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00Z"),
-										RecordSequence: "00000002",
-										ChildPartitions: []*ChildPartition{
-											{
-												Token:                 "c",
-												ParentPartitionTokens: []string{"a"},
-											},
+								},
+								{
+									StartTimestamp: mustParseTime(t, "2022-12-04T19:00:00Z"),
+									RecordSequence: "00000002",
+									ChildPartitions: []*changestreams.ChildPartition{
+										{
+											Token:                 "c",
+											ParentPartitionTokens: []string{"a"},
 										},
 									},
 								},
@@ -84,19 +76,17 @@ func TestPartitionVisualizer(t *testing.T) {
 					},
 				},
 				{
-					partitionToken: "b",
-					result: &ReadResult{
-						ChangeRecords: []*ChangeRecord{
-							{
-								ChildPartitionsRecords: []*ChildPartitionsRecord{
-									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00Z"),
-										RecordSequence: "00000001",
-										ChildPartitions: []*ChildPartition{
-											{
-												Token:                 "d",
-												ParentPartitionTokens: []string{"b", "c"},
-											},
+					PartitionToken: "b",
+					ChangeRecords: []*changestreams.ChangeRecord{
+						{
+							ChildPartitionsRecords: []*changestreams.ChildPartitionsRecord{
+								{
+									StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00Z"),
+									RecordSequence: "00000001",
+									ChildPartitions: []*changestreams.ChildPartition{
+										{
+											Token:                 "d",
+											ParentPartitionTokens: []string{"b", "c"},
 										},
 									},
 								},
@@ -105,19 +95,17 @@ func TestPartitionVisualizer(t *testing.T) {
 					},
 				},
 				{
-					partitionToken: "c",
-					result: &ReadResult{
-						ChangeRecords: []*ChangeRecord{
-							{
-								ChildPartitionsRecords: []*ChildPartitionsRecord{
-									{
-										StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00Z"),
-										RecordSequence: "00000001",
-										ChildPartitions: []*ChildPartition{
-											{
-												Token:                 "d",
-												ParentPartitionTokens: []string{"b", "c"},
-											},
+					PartitionToken: "c",
+					ChangeRecords: []*changestreams.ChangeRecord{
+						{
+							ChildPartitionsRecords: []*changestreams.ChildPartitionsRecord{
+								{
+									StartTimestamp: mustParseTime(t, "2022-12-04T20:00:00Z"),
+									RecordSequence: "00000001",
+									ChildPartitions: []*changestreams.ChildPartition{
+										{
+											Token:                 "d",
+											ParentPartitionTokens: []string{"b", "c"},
 										},
 									},
 								},
@@ -126,10 +114,8 @@ func TestPartitionVisualizer(t *testing.T) {
 					},
 				},
 				{
-					partitionToken: "d",
-					result: &ReadResult{
-						ChangeRecords: []*ChangeRecord{},
-					},
+					PartitionToken: "d",
+					ChangeRecords:  []*changestreams.ChangeRecord{},
 				},
 			},
 			expected: `digraph {
@@ -151,8 +137,8 @@ func TestPartitionVisualizer(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			var out bytes.Buffer
 			visualizer := NewPartitionVisualizer(&out)
-			for _, r := range test.partitionResults {
-				visualizer.Consume(r.partitionToken, r.result)
+			for _, r := range test.readResults {
+				visualizer.Consume(r)
 			}
 			visualizer.Draw()
 

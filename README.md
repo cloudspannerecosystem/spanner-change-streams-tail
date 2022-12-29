@@ -2,7 +2,7 @@
 
 [![run-tests](https://github.com/cloudspannerecosystem/spanner-change-streams-tail/actions/workflows/run-tests.yaml/badge.svg)](https://github.com/cloudspannerecosystem/spanner-change-streams-tail/actions/workflows/run-tests.yaml)
 
-A handy tool to tail Cloud Spanner Change Streams.
+A handy tool to tail [Cloud Spanner Change Streams](https://cloud.google.com/spanner/docs/change-streams).
 
 ## Install
 
@@ -155,6 +155,15 @@ digraph {
 ```
 
 ![Partitions](./partitions.png)
+
+## Go library
+
+This repository also has `changestreams` package that can be used as a Go library to subscribe the change streams from
+your Go application. You can get more details from
+the [Godoc](https://pkg.go.dev/github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams).
+
+Note that `changestreams` package has limited scalability. If you need more scalable, reliable solution, you can use an
+official [Dataflow connector](https://cloud.google.com/spanner/docs/change-streams/use-dataflow).
 
 ## Disclaimer
 

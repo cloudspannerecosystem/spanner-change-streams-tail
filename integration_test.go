@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/spanner"
+	"github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/option"
@@ -160,10 +161,10 @@ func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 }
 
 type dataChangeRecordConsumer struct {
-	records []*DataChangeRecord
+	records []*changestreams.DataChangeRecord
 }
 
-func (c *dataChangeRecordConsumer) Consume(partitionToken string, result *ReadResult) error {
+func (c *dataChangeRecordConsumer) Consume(result *changestreams.ReadResult) error {
 	for _, changeRecord := range result.ChangeRecords {
 		for _, r := range changeRecord.DataChangeRecords {
 			c.records = append(c.records, r)
@@ -193,7 +194,7 @@ func TestSubscriber(t *testing.T) {
 	for _, test := range []struct {
 		desc     string
 		dmls     []string
-		expected []*DataChangeRecord
+		expected []*changestreams.DataChangeRecord
 	}{
 		{
 			desc: "data change record",
@@ -201,12 +202,12 @@ func TestSubscriber(t *testing.T) {
 				fmt.Sprintf("INSERT INTO %s (id, active) VALUES (1, true)", setupResult.tableID),
 				fmt.Sprintf("DELETE FROM %s WHERE id = 1", setupResult.tableID),
 			},
-			expected: []*DataChangeRecord{
+			expected: []*changestreams.DataChangeRecord{
 				{
 					RecordSequence:                       "00000000",
 					IsLastRecordInTransactionInPartition: false,
 					TableName:                            setupResult.tableID,
-					ColumnTypes: []*ColumnType{
+					ColumnTypes: []*changestreams.ColumnType{
 						{
 							Name: "id",
 							Type: spanner.NullJSON{
@@ -226,7 +227,7 @@ func TestSubscriber(t *testing.T) {
 							OrdinalPosition: 2,
 						},
 					},
-					Mods: []*Mod{
+					Mods: []*changestreams.Mod{
 						{
 							Keys: spanner.NullJSON{
 								Value: map[string]interface{}{"id": "1"},
@@ -253,7 +254,7 @@ func TestSubscriber(t *testing.T) {
 					RecordSequence:                       "00000001",
 					IsLastRecordInTransactionInPartition: true,
 					TableName:                            setupResult.tableID,
-					ColumnTypes: []*ColumnType{
+					ColumnTypes: []*changestreams.ColumnType{
 						{
 							Name: "id",
 							Type: spanner.NullJSON{
@@ -273,7 +274,7 @@ func TestSubscriber(t *testing.T) {
 							OrdinalPosition: 2,
 						},
 					},
-					Mods: []*Mod{
+					Mods: []*changestreams.Mod{
 						{
 							Keys: spanner.NullJSON{
 								Value: map[string]interface{}{"id": "1"},
@@ -300,15 +301,16 @@ func TestSubscriber(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
-			client := setupResult.client
-			var startTimestamp, endTimestamp time.Time
-			subscriber := NewSubscriber(client, setupResult.streamID, startTimestamp, endTimestamp)
+			subscriber, err := changestreams.NewSubscriber(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID)
+			if err != nil {
+				t.Fatalf("failed to create a subscriber: %v", err)
+			}
 
 			consumer := &dataChangeRecordConsumer{}
 			subscriberContext, subscriberCancel := context.WithCancel(ctx)
 			go subscriber.Subscribe(subscriberContext, consumer)
 
-			if _, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+			if _, err := setupResult.client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 				for _, dml := range test.dmls {
 					if _, err := txn.Update(ctx, spanner.NewStatement(dml)); err != nil {
 						return err
@@ -323,7 +325,7 @@ func TestSubscriber(t *testing.T) {
 			time.Sleep(5 * time.Second)
 			subscriberCancel()
 
-			opt := cmpopts.IgnoreFields(DataChangeRecord{}, "CommitTimestamp", "ServerTransactionID")
+			opt := cmpopts.IgnoreFields(changestreams.DataChangeRecord{}, "CommitTimestamp", "ServerTransactionID")
 			if diff := cmp.Diff(consumer.records, test.expected, opt); diff != "" {
 				t.Errorf("diff = %v", diff)
 			}

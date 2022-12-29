@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams"
 )
 
 const (
@@ -28,13 +30,8 @@ const (
 	formatJSON = "json"
 )
 
-type VerboseLog struct {
-	PartitionToken string          `json:"partition_token"`
-	ChangeRecords  []*ChangeRecord `json:"change_record"`
-}
-
-// Assert that Logger implements Consumer.
-var _ Consumer = (*Logger)(nil)
+// Assert that Logger implements changestreams.Consumer.
+var _ changestreams.Consumer = (*Logger)(nil)
 
 type Logger struct {
 	out     io.Writer
@@ -43,16 +40,12 @@ type Logger struct {
 	mu      sync.Mutex
 }
 
-func (l *Logger) Consume(partitionToken string, result *ReadResult) error {
+func (l *Logger) Consume(result *changestreams.ReadResult) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.verbose {
-		log := VerboseLog{
-			PartitionToken: partitionToken,
-			ChangeRecords:  result.ChangeRecords,
-		}
-		return json.NewEncoder(l.out).Encode(&log)
+		return json.NewEncoder(l.out).Encode(result)
 	}
 
 	// Only prints the data change records.

@@ -14,10 +14,11 @@
 // limitations under the License.
 //
 
-package main
+package changestreams
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -26,18 +27,20 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const heartbeatIntervalMillis = 10_000
-
+// ReadResult is the result of the read change records from the partition.
 type ReadResult struct {
-	ChangeRecords []*ChangeRecord `spanner:"ChangeRecord" json:"change_record"`
+	PartitionToken string          `json:"partition_token"`
+	ChangeRecords  []*ChangeRecord `spanner:"ChangeRecord" json:"change_record"`
 }
 
+// ChangeRecord is the single unit of the records from the change stream.
 type ChangeRecord struct {
 	DataChangeRecords      []*DataChangeRecord      `spanner:"data_change_record" json:"data_change_record"`
 	HeartbeatRecords       []*HeartbeatRecord       `spanner:"heartbeat_record" json:"heartbeat_record"`
 	ChildPartitionsRecords []*ChildPartitionsRecord `spanner:"child_partitions_record" json:"child_partitions_record"`
 }
 
+// DataChangeRecord contains a set of changes to the table.
 type DataChangeRecord struct {
 	CommitTimestamp                      time.Time     `spanner:"commit_timestamp" json:"commit_timestamp"`
 	RecordSequence                       string        `spanner:"record_sequence" json:"record_sequence"`
@@ -54,6 +57,7 @@ type DataChangeRecord struct {
 	IsSystemTransaction                  bool          `spanner:"is_system_transaction" json:"is_system_transaction"`
 }
 
+// ColumnType is the metadata of the column.
 type ColumnType struct {
 	Name            string           `spanner:"name" json:"name"`
 	Type            spanner.NullJSON `spanner:"type" json:"type"`
@@ -61,22 +65,26 @@ type ColumnType struct {
 	OrdinalPosition int64            `spanner:"ordinal_position" json:"ordinal_position"`
 }
 
+// Mod is the changes that were made on the table.
 type Mod struct {
 	Keys      spanner.NullJSON `spanner:"keys" json:"keys"`
 	NewValues spanner.NullJSON `spanner:"new_values" json:"new_values"`
 	OldValues spanner.NullJSON `spanner:"old_values" json:"old_values"`
 }
 
+// HeartbeatRecord is the heartbeat record returned from Cloud Spanner.
 type HeartbeatRecord struct {
 	Timestamp time.Time `spanner:"timestamp" json:"timestamp"`
 }
 
+// ChildPartitionsRecord contains the child partitions of the stream.
 type ChildPartitionsRecord struct {
 	StartTimestamp  time.Time         `spanner:"start_timestamp" json:"start_timestamp"`
 	RecordSequence  string            `spanner:"record_sequence" json:"record_sequence"`
 	ChildPartitions []*ChildPartition `spanner:"child_partitions" json:"child_partitions"`
 }
 
+// ChildPartition contains the child partition token.
 type ChildPartition struct {
 	Token                 string   `spanner:"token" json:"token"`
 	ParentPartitionTokens []string `spanner:"parent_partition_tokens" json:"parent_partition_tokens"`
@@ -90,33 +98,92 @@ const (
 	partitionStateFinished
 )
 
+// Subscriber is the change stream subscriber.
 type Subscriber struct {
-	client         *spanner.Client
-	streamID       string
-	startTimestamp time.Time
-	endTimestamp   time.Time
-	group          *errgroup.Group
-	states         map[string]partitionState
-	mu             sync.Mutex
+	client            *spanner.Client
+	streamID          string
+	startTimestamp    time.Time
+	endTimestamp      time.Time
+	heartbeatInterval time.Duration
+	states            map[string]partitionState
+	group             *errgroup.Group
+	mu                sync.Mutex
 }
 
-func NewSubscriber(client *spanner.Client, streamID string, startTimestamp, endTimestamp time.Time) *Subscriber {
-	return &Subscriber{
-		client:         client,
-		streamID:       streamID,
-		startTimestamp: startTimestamp,
-		endTimestamp:   endTimestamp,
-		states:         make(map[string]partitionState),
+// Config is the configuration for the subscriber.
+type Config struct {
+	// If StartTimestamp is a zero value of time.Time, subscriber subscribes from the current timestamp.
+	StartTimestamp time.Time
+	// If EndTimestamp is a zero value of time.Time, subscriber subscribes until it is cancelled.
+	EndTimestamp      time.Time
+	HeartbeatInterval time.Duration
+}
+
+// NewSubscriber creates a new subscriber.
+func NewSubscriber(ctx context.Context, projectID, instanceID, databaseID, streamID string) (*Subscriber, error) {
+	return NewSubscriberWithConfig(ctx, projectID, instanceID, databaseID, streamID, &Config{})
+}
+
+// NewSubscriberWithConfig creates a new subscriber with the given configuration.
+func NewSubscriberWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config *Config) (*Subscriber, error) {
+	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
+	client, err := spanner.NewClientWithConfig(ctx, dbPath, spanner.ClientConfig{
+		SessionPoolConfig: spanner.SessionPoolConfig{
+			WriteSessions: 0,
+		},
+	})
+	if err != nil {
+		return nil, err
 	}
+
+	heartbeatInterval := config.HeartbeatInterval
+	if heartbeatInterval == 0 {
+		heartbeatInterval = 10 * time.Second
+	}
+
+	return &Subscriber{
+		client:            client,
+		streamID:          streamID,
+		startTimestamp:    config.StartTimestamp,
+		endTimestamp:      config.EndTimestamp,
+		heartbeatInterval: heartbeatInterval,
+		states:            make(map[string]partitionState),
+	}, nil
 }
 
+// Close closes the subscriber.
+func (s *Subscriber) Close() {
+	s.client.Close()
+}
+
+// Consumer is the interface to consume the read results from the change stream.
+//
+// Consume could be called from multiple goroutines, so it must be reentrant-safe.
 type Consumer interface {
-	Consume(partitionToken string, result *ReadResult) error
+	Consume(result *ReadResult) error
 }
 
+// ConsumerFunc type is an adapter to allow the use of ordinary functions as Consumer.
+type ConsumerFunc func(*ReadResult) error
+
+// Consume calls f(result).
+func (f ConsumerFunc) Consume(result *ReadResult) error {
+	return f(result)
+}
+
+// Subscribe starts subscribing the change stream.
+//
+// If consumer returns an error, Subscribe finishes the process and returns the error.
+// Once this method is called, subscriber must not be reused in any other places (i.e. not reentrant).
 func (s *Subscriber) Subscribe(ctx context.Context, consumer Consumer) error {
+	s.mu.Lock()
+	if s.group != nil {
+		s.mu.Unlock()
+		return errors.New("subscriber has already been subscribed")
+	}
 	group, ctx := errgroup.WithContext(ctx)
 	s.group = group
+	s.mu.Unlock()
 
 	s.group.Go(func() error {
 		start := s.startTimestamp
@@ -140,7 +207,7 @@ func (s *Subscriber) startRead(ctx context.Context, partitionToken string, start
 			"start_timestamp":         startTimestamp,
 			"end_timestamp":           s.endTimestamp,
 			"partition_token":         partitionToken,
-			"heartbeat_millis_second": heartbeatIntervalMillis,
+			"heartbeat_millis_second": s.heartbeatInterval / time.Millisecond,
 		},
 	}
 	if s.endTimestamp.IsZero() {
@@ -154,7 +221,7 @@ func (s *Subscriber) startRead(ctx context.Context, partitionToken string, start
 
 	var childPartitionRecords []*ChildPartitionsRecord
 	if err := s.client.Single().Query(ctx, stmt).Do(func(r *spanner.Row) error {
-		var readResult ReadResult
+		readResult := ReadResult{PartitionToken: partitionToken}
 		if err := r.ToStructLenient(&readResult); err != nil {
 			return err
 		}
@@ -165,7 +232,7 @@ func (s *Subscriber) startRead(ctx context.Context, partitionToken string, start
 			}
 		}
 
-		return consumer.Consume(partitionToken, &readResult)
+		return consumer.Consume(&readResult)
 	}); err != nil {
 		return err
 	}
