@@ -10,6 +10,12 @@ A handy tool to tail [Cloud Spanner Change Streams](https://cloud.google.com/spa
 go install github.com/cloudspannerecosystem/spanner-change-streams-tail@latest
 ```
 
+## Building
+
+```
+make
+```
+
 ## Usage
 
 ```
