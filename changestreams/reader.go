@@ -99,8 +99,8 @@ const (
 	partitionStateFinished
 )
 
-// Subscriber is the change stream subscriber.
-type Subscriber struct {
+// Reader is the change stream reader.
+type Reader struct {
 	client            *spanner.Client
 	streamID          string
 	startTimestamp    time.Time
@@ -111,22 +111,22 @@ type Subscriber struct {
 	mu                sync.Mutex
 }
 
-// Config is the configuration for the subscriber.
+// Config is the configuration for the reader.
 type Config struct {
-	// If StartTimestamp is a zero value of time.Time, subscriber subscribes from the current timestamp.
+	// If StartTimestamp is a zero value of time.Time, reader reads from the current timestamp.
 	StartTimestamp time.Time
-	// If EndTimestamp is a zero value of time.Time, subscriber subscribes until it is cancelled.
+	// If EndTimestamp is a zero value of time.Time, reader reads until it is cancelled.
 	EndTimestamp      time.Time
 	HeartbeatInterval time.Duration
 }
 
-// NewSubscriber creates a new subscriber.
-func NewSubscriber(ctx context.Context, projectID, instanceID, databaseID, streamID string, opts ...option.ClientOption) (*Subscriber, error) {
-	return NewSubscriberWithConfig(ctx, projectID, instanceID, databaseID, streamID, &Config{}, opts...)
+// NewReader creates a new reader.
+func NewReader(ctx context.Context, projectID, instanceID, databaseID, streamID string, opts ...option.ClientOption) (*Reader, error) {
+	return NewReaderWithConfig(ctx, projectID, instanceID, databaseID, streamID, &Config{}, opts...)
 }
 
-// NewSubscriberWithConfig creates a new subscriber with the given configuration.
-func NewSubscriberWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config *Config, opts ...option.ClientOption) (*Subscriber, error) {
+// NewReaderWithConfig creates a new reader with a given configuration.
+func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config *Config, opts ...option.ClientOption) (*Reader, error) {
 	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
 	client, err := spanner.NewClientWithConfig(ctx, dbPath, spanner.ClientConfig{
 		SessionPoolConfig: spanner.SessionPoolConfig{
@@ -142,7 +142,7 @@ func NewSubscriberWithConfig(ctx context.Context, projectID, instanceID, databas
 		heartbeatInterval = 10 * time.Second
 	}
 
-	return &Subscriber{
+	return &Reader{
 		client:            client,
 		streamID:          streamID,
 		startTimestamp:    config.StartTimestamp,
@@ -152,66 +152,51 @@ func NewSubscriberWithConfig(ctx context.Context, projectID, instanceID, databas
 	}, nil
 }
 
-// Close closes the subscriber.
-func (s *Subscriber) Close() {
-	s.client.Close()
+// Close closes the reader.
+func (r *Reader) Close() {
+	r.client.Close()
 }
 
-// Consumer is the interface to consume the read results from the change stream.
+// Read starts reading the change stream.
 //
-// Consume could be called from multiple goroutines, so it must be reentrant-safe.
-type Consumer interface {
-	Consume(result *ReadResult) error
-}
-
-// ConsumerFunc type is an adapter to allow the use of ordinary functions as Consumer.
-type ConsumerFunc func(*ReadResult) error
-
-// Consume calls f(result).
-func (f ConsumerFunc) Consume(result *ReadResult) error {
-	return f(result)
-}
-
-// Subscribe starts subscribing the change stream.
-//
-// If consumer returns an error, Subscribe finishes the process and returns the error.
-// Once this method is called, subscriber must not be reused in any other places (i.e. not reentrant).
-func (s *Subscriber) Subscribe(ctx context.Context, consumer Consumer) error {
-	s.mu.Lock()
-	if s.group != nil {
-		s.mu.Unlock()
-		return errors.New("subscriber has already been subscribed")
+// If function f returns an error, Read finishes the process and returns the error.
+// Once this method is called, reader must not be reused in any other places (i.e. not reentrant).
+func (r *Reader) Read(ctx context.Context, f func(result *ReadResult) error) error {
+	r.mu.Lock()
+	if r.group != nil {
+		r.mu.Unlock()
+		return errors.New("reader has already been read")
 	}
 	group, ctx := errgroup.WithContext(ctx)
-	s.group = group
-	s.mu.Unlock()
+	r.group = group
+	r.mu.Unlock()
 
-	s.group.Go(func() error {
-		start := s.startTimestamp
+	r.group.Go(func() error {
+		start := r.startTimestamp
 		if start.IsZero() {
 			start = time.Now()
 		}
-		return s.startRead(ctx, "", start, consumer)
+		return r.startRead(ctx, "", start, f)
 	})
 
 	return group.Wait()
 }
 
-func (s *Subscriber) startRead(ctx context.Context, partitionToken string, startTimestamp time.Time, consumer Consumer) error {
-	if !s.markStateReading(partitionToken) {
+func (r *Reader) startRead(ctx context.Context, partitionToken string, startTimestamp time.Time, f func(result *ReadResult) error) error {
+	if !r.markStateReading(partitionToken) {
 		return nil
 	}
 
 	stmt := spanner.Statement{
-		SQL: fmt.Sprintf("SELECT ChangeRecord FROM READ_%s(@start_timestamp, @end_timestamp, @partition_token, @heartbeat_millis_second)", s.streamID),
+		SQL: fmt.Sprintf("SELECT ChangeRecord FROM READ_%s(@start_timestamp, @end_timestamp, @partition_token, @heartbeat_millis_second)", r.streamID),
 		Params: map[string]interface{}{
 			"start_timestamp":         startTimestamp,
-			"end_timestamp":           s.endTimestamp,
+			"end_timestamp":           r.endTimestamp,
 			"partition_token":         partitionToken,
-			"heartbeat_millis_second": s.heartbeatInterval / time.Millisecond,
+			"heartbeat_millis_second": r.heartbeatInterval / time.Millisecond,
 		},
 	}
-	if s.endTimestamp.IsZero() {
+	if r.endTimestamp.IsZero() {
 		// Must be converted to NULL.
 		stmt.Params["end_timestamp"] = nil
 	}
@@ -221,7 +206,7 @@ func (s *Subscriber) startRead(ctx context.Context, partitionToken string, start
 	}
 
 	var childPartitionRecords []*ChildPartitionsRecord
-	if err := s.client.Single().Query(ctx, stmt).Do(func(r *spanner.Row) error {
+	if err := r.client.Single().Query(ctx, stmt).Do(func(r *spanner.Row) error {
 		readResult := ReadResult{PartitionToken: partitionToken}
 		if err := r.ToStructLenient(&readResult); err != nil {
 			return err
@@ -233,20 +218,20 @@ func (s *Subscriber) startRead(ctx context.Context, partitionToken string, start
 			}
 		}
 
-		return consumer.Consume(&readResult)
+		return f(&readResult)
 	}); err != nil {
 		return err
 	}
 
-	s.markStateFinished(partitionToken)
+	r.markStateFinished(partitionToken)
 
 	for _, childPartitionsRecord := range childPartitionRecords {
-		// childStartTimestamp is always later than s.startTimestamp.
+		// childStartTimestamp is always later than r.startTimestamp.
 		childStartTimestamp := childPartitionsRecord.StartTimestamp
 		for _, childPartition := range childPartitionsRecord.ChildPartitions {
-			if s.canReadChild(childPartition) {
-				s.group.Go(func() error {
-					return s.startRead(ctx, childPartition.Token, childStartTimestamp, consumer)
+			if r.canReadChild(childPartition) {
+				r.group.Go(func() error {
+					return r.startRead(ctx, childPartition.Token, childStartTimestamp, f)
 				})
 			}
 		}
@@ -255,31 +240,31 @@ func (s *Subscriber) startRead(ctx context.Context, partitionToken string, start
 	return nil
 }
 
-func (s *Subscriber) markStateReading(partitionToken string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (r *Reader) markStateReading(partitionToken string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	if _, ok := s.states[partitionToken]; ok {
+	if _, ok := r.states[partitionToken]; ok {
 		// Already started by another parent.
 		return false
 	}
-	s.states[partitionToken] = partitionStateReading
+	r.states[partitionToken] = partitionStateReading
 	return true
 }
 
-func (s *Subscriber) markStateFinished(partitionToken string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (r *Reader) markStateFinished(partitionToken string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	s.states[partitionToken] = partitionStateFinished
+	r.states[partitionToken] = partitionStateFinished
 }
 
-func (s *Subscriber) canReadChild(partition *ChildPartition) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (r *Reader) canReadChild(partition *ChildPartition) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	for _, parent := range partition.ParentPartitionTokens {
-		if s.states[parent] != partitionStateFinished {
+		if r.states[parent] != partitionStateFinished {
 			return false
 		}
 	}

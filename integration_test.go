@@ -162,20 +162,7 @@ func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 	}, nil
 }
 
-type dataChangeRecordConsumer struct {
-	records []*changestreams.DataChangeRecord
-}
-
-func (c *dataChangeRecordConsumer) Consume(result *changestreams.ReadResult) error {
-	for _, changeRecord := range result.ChangeRecords {
-		for _, r := range changeRecord.DataChangeRecords {
-			c.records = append(c.records, r)
-		}
-	}
-	return nil
-}
-
-func TestSubscriber(t *testing.T) {
+func TestReader(t *testing.T) {
 	if skipIntegrateTest {
 		t.Skip("integration tests skipped")
 	}
@@ -303,14 +290,21 @@ func TestSubscriber(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
-			subscriber, err := changestreams.NewSubscriber(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID, setupResult.clientOptions...)
+			reader, err := changestreams.NewReader(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID, setupResult.clientOptions...)
 			if err != nil {
-				t.Fatalf("failed to create a subscriber: %v", err)
+				t.Fatalf("failed to create a reader: %v", err)
 			}
 
-			consumer := &dataChangeRecordConsumer{}
-			subscriberContext, subscriberCancel := context.WithCancel(ctx)
-			go subscriber.Subscribe(subscriberContext, consumer)
+			readerContext, readerCancel := context.WithCancel(ctx)
+			var records []*changestreams.DataChangeRecord
+			go reader.Read(readerContext, func(result *changestreams.ReadResult) error {
+				for _, changeRecord := range result.ChangeRecords {
+					for _, r := range changeRecord.DataChangeRecords {
+						records = append(records, r)
+					}
+				}
+				return nil
+			})
 
 			if _, err := setupResult.client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 				for _, dml := range test.dmls {
@@ -323,12 +317,12 @@ func TestSubscriber(t *testing.T) {
 				t.Fatalf("failed to add test data: %v", err)
 			}
 
-			// Wait a bit and stop subscriber.
+			// Wait a bit and stop reader.
 			time.Sleep(5 * time.Second)
-			subscriberCancel()
+			readerCancel()
 
 			opt := cmpopts.IgnoreFields(changestreams.DataChangeRecord{}, "CommitTimestamp", "ServerTransactionID")
-			if diff := cmp.Diff(consumer.records, test.expected, opt); diff != "" {
+			if diff := cmp.Diff(records, test.expected, opt); diff != "" {
 				t.Errorf("diff = %v", diff)
 			}
 		})

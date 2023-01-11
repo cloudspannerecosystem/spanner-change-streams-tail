@@ -15,7 +15,7 @@
 //
 
 /*
-Package changestreams provides the functionality for subscribing the Cloud Spanner change streams.
+Package changestreams provides the functionality for reading the Cloud Spanner change streams.
 
 # Example
 
@@ -31,21 +31,21 @@ Package changestreams provides the functionality for subscribing the Cloud Spann
 
 	func main() {
 		ctx := context.Background()
-		subscriber, err := changestreams.NewSubscriber(ctx, "myproject", "myinstance", "mydb", "mystream")
+		reader, err := changestreams.NewReader(ctx, "myproject", "myinstance", "mydb", "mystream")
 		if err != nil {
-			log.Fatalf("failed to create a subscriber: %v", err)
+			log.Fatalf("failed to create a reader: %v", err)
 		}
-		defer subscriber.Close()
+		defer reader.Close()
 
-		if err := subscriber.Subscribe(ctx, changestreams.ConsumerFunc(func(result *changestreams.ReadResult) error {
+		if err := reader.Read(ctx, func(result *changestreams.ReadResult) error {
 			for _, cr := range result.ChangeRecords {
 				for _, dcr := range cr.DataChangeRecords {
 					fmt.Printf("[%s] %s %s\n", dcr.CommitTimestamp, dcr.ModType, dcr.TableName)
 				}
 			}
 			return nil
-		})); err != nil {
-			log.Fatalf("failed to subscribe: %v", err)
+		}); err != nil {
+			log.Fatalf("failed to read: %v", err)
 		}
 	}
 */

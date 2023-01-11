@@ -158,8 +158,8 @@ digraph {
 
 ## Go library
 
-This repository also has `changestreams` package that can be used as a Go library to subscribe the change streams from
-your Go application. You can get more details from
+This repository also has `changestreams` package that can be used as a Go library to read the change streams from your
+Go application. You can get more details from
 the [Godoc](https://pkg.go.dev/github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams).
 
 Note that `changestreams` package has limited scalability. If you need more scalable, reliable solution, you can use an

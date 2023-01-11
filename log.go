@@ -30,9 +30,6 @@ const (
 	formatJSON = "json"
 )
 
-// Assert that Logger implements changestreams.Consumer.
-var _ changestreams.Consumer = (*Logger)(nil)
-
 type Logger struct {
 	out     io.Writer
 	format  string
@@ -40,7 +37,7 @@ type Logger struct {
 	mu      sync.Mutex
 }
 
-func (l *Logger) Consume(result *changestreams.ReadResult) error {
+func (l *Logger) Read(result *changestreams.ReadResult) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

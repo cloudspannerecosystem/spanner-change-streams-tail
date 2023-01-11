@@ -115,16 +115,16 @@ func main() {
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   endTimestamp,
 	}
-	subscriber, err := changestreams.NewSubscriberWithConfig(ctx, projectID, instanceID, databaseID, streamID, &config)
+	reader, err := changestreams.NewReaderWithConfig(ctx, projectID, instanceID, databaseID, streamID, &config)
 	if err != nil {
-		exitf("failed to create a subscriber: %v", err)
+		exitf("failed to create a reader: %v", err)
 	}
-	defer subscriber.Close()
+	defer reader.Close()
 
 	if visualizePartitions {
 		fmt.Fprintf(os.Stderr, "Reading the stream and analyzing partitions...\n\n")
 		visualizer := NewPartitionVisualizer(os.Stdout)
-		if err := subscriber.Subscribe(ctx, visualizer); err != nil {
+		if err := reader.Read(ctx, visualizer.Read); err != nil {
 			exitf("failed to read stream: %v", err)
 		}
 		visualizer.Draw()
@@ -138,7 +138,7 @@ func main() {
 		format:  format,
 		verbose: verbose,
 	}
-	if err := subscriber.Subscribe(ctx, logger); err != nil {
+	if err := reader.Read(ctx, logger.Read); err != nil {
 		exitf("failed to read stream: %v", err)
 	}
 }

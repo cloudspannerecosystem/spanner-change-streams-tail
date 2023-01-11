@@ -138,7 +138,7 @@ func TestPartitionVisualizer(t *testing.T) {
 			var out bytes.Buffer
 			visualizer := NewPartitionVisualizer(&out)
 			for _, r := range test.readResults {
-				visualizer.Consume(r)
+				visualizer.Read(r)
 			}
 			visualizer.Draw()
 

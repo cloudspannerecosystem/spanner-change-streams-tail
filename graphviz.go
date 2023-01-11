@@ -37,9 +37,6 @@ type Partition struct {
 	Parents        []*Partition
 }
 
-// Assert that PartitionVisualizer implements changestreams.Consumer.
-var _ changestreams.Consumer = (*PartitionVisualizer)(nil)
-
 type PartitionVisualizer struct {
 	partitions map[string]*Partition
 	mu         sync.Mutex
@@ -56,7 +53,7 @@ func NewPartitionVisualizer(out io.Writer) *PartitionVisualizer {
 	}
 }
 
-func (v *PartitionVisualizer) Consume(result *changestreams.ReadResult) error {
+func (v *PartitionVisualizer) Read(result *changestreams.ReadResult) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
