@@ -47,7 +47,7 @@ Reading the stream...
 
 ### JSON format
 
-With `-f, --format=json` option, you can get the results in JSON.
+With `-f json` option, you can get the results in JSON.
 
 ```
 $ spanner-change-streams-tail -p myproject -i myinstance -d mydb -s mystream -f json
