@@ -230,8 +230,9 @@ func (r *Reader) startRead(ctx context.Context, partitionToken string, startTime
 		childStartTimestamp := childPartitionsRecord.StartTimestamp
 		for _, childPartition := range childPartitionsRecord.ChildPartitions {
 			if r.canReadChild(childPartition) {
+				partition := childPartition
 				r.group.Go(func() error {
-					return r.startRead(ctx, childPartition.Token, childStartTimestamp, f)
+					return r.startRead(ctx, partition.Token, childStartTimestamp, f)
 				})
 			}
 		}
