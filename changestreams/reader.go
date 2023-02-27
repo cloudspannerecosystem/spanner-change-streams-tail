@@ -18,6 +18,7 @@ package changestreams
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -91,6 +92,13 @@ type ChildPartition struct {
 	ParentPartitionTokens []string `spanner:"parent_partition_tokens" json:"parent_partition_tokens"`
 }
 
+// changeRecordPostgres is an interim struct to decode change stream result for PostgreSQL.
+type changeRecordPostgres struct {
+	DataChangeRecord      *DataChangeRecord      `spanner:"data_change_record" json:"data_change_record"`
+	HeartbeatRecord       *HeartbeatRecord       `spanner:"heartbeat_record" json:"heartbeat_record"`
+	ChildPartitionsRecord *ChildPartitionsRecord `spanner:"child_partitions_record" json:"child_partitions_record"`
+}
+
 type partitionState int
 
 const (
@@ -106,6 +114,7 @@ type Reader struct {
 	startTimestamp    time.Time
 	endTimestamp      time.Time
 	heartbeatInterval time.Duration
+	dialect           dialect
 	states            map[string]partitionState
 	group             *errgroup.Group
 	mu                sync.Mutex
@@ -137,6 +146,11 @@ func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID,
 		return nil, err
 	}
 
+	dialect, err := detectDialect(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect dialect: %w", err)
+	}
+
 	heartbeatInterval := config.HeartbeatInterval
 	if heartbeatInterval == 0 {
 		heartbeatInterval = 10 * time.Second
@@ -148,6 +162,7 @@ func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID,
 		startTimestamp:    config.StartTimestamp,
 		endTimestamp:      config.EndTimestamp,
 		heartbeatInterval: heartbeatInterval,
+		dialect:           dialect,
 		states:            make(map[string]partitionState),
 	}, nil
 }
@@ -187,29 +202,64 @@ func (r *Reader) startRead(ctx context.Context, partitionToken string, startTime
 		return nil
 	}
 
-	stmt := spanner.Statement{
-		SQL: fmt.Sprintf("SELECT ChangeRecord FROM READ_%s(@start_timestamp, @end_timestamp, @partition_token, @heartbeat_millis_second)", r.streamID),
-		Params: map[string]interface{}{
-			"start_timestamp":         startTimestamp,
-			"end_timestamp":           r.endTimestamp,
-			"partition_token":         partitionToken,
-			"heartbeat_millis_second": r.heartbeatInterval / time.Millisecond,
-		},
-	}
-	if r.endTimestamp.IsZero() {
-		// Must be converted to NULL.
-		stmt.Params["end_timestamp"] = nil
-	}
-	if partitionToken == "" {
-		// Must be converted to NULL.
-		stmt.Params["partition_token"] = nil
+	var stmt spanner.Statement
+	switch r.dialect {
+	case dialectGoogleSQL:
+		stmt = spanner.Statement{
+			SQL: fmt.Sprintf("SELECT ChangeRecord FROM READ_%s(@start_timestamp, @end_timestamp, @partition_token, @heartbeat_millis_second)", r.streamID),
+			Params: map[string]interface{}{
+				"start_timestamp":         startTimestamp,
+				"end_timestamp":           r.endTimestamp,
+				"partition_token":         partitionToken,
+				"heartbeat_millis_second": r.heartbeatInterval / time.Millisecond,
+			},
+		}
+		if r.endTimestamp.IsZero() {
+			// Must be converted to NULL.
+			stmt.Params["end_timestamp"] = nil
+		}
+		if partitionToken == "" {
+			// Must be converted to NULL.
+			stmt.Params["partition_token"] = nil
+		}
+	case dialectPostgreSQL:
+		stmt = spanner.Statement{
+			SQL: fmt.Sprintf("SELECT * FROM spanner.read_json_%s($1, $2, $3, $4, null)", r.streamID),
+			Params: map[string]interface{}{
+				"p1": startTimestamp,
+				"p2": r.endTimestamp,
+				"p3": partitionToken,
+				"p4": r.heartbeatInterval / time.Millisecond,
+			},
+		}
+		if r.endTimestamp.IsZero() {
+			// Must be converted to NULL.
+			stmt.Params["p2"] = nil
+		}
+		if partitionToken == "" {
+			// Must be converted to NULL.
+			stmt.Params["p3"] = nil
+		}
+	default:
+		return fmt.Errorf("unexpected dialect: %s", r.dialect)
 	}
 
 	var childPartitionRecords []*ChildPartitionsRecord
-	if err := r.client.Single().Query(ctx, stmt).Do(func(r *spanner.Row) error {
+	if err := r.client.Single().Query(ctx, stmt).Do(func(row *spanner.Row) error {
 		readResult := ReadResult{PartitionToken: partitionToken}
-		if err := r.ToStructLenient(&readResult); err != nil {
-			return err
+		switch r.dialect {
+		case dialectGoogleSQL:
+			if err := row.ToStructLenient(&readResult); err != nil {
+				return err
+			}
+		case dialectPostgreSQL:
+			changeRecord, err := decodePostgresRow(row)
+			if err != nil {
+				return err
+			}
+			readResult.ChangeRecords = []*ChangeRecord{changeRecord}
+		default:
+			return fmt.Errorf("unexpected dialect: %s", r.dialect)
 		}
 
 		for _, changeRecord := range readResult.ChangeRecords {
@@ -270,4 +320,39 @@ func (r *Reader) canReadChild(partition *ChildPartition) bool {
 		}
 	}
 	return true
+}
+
+func decodePostgresRow(row *spanner.Row) (*ChangeRecord, error) {
+	// Retrieve JSON bytes.
+	var col spanner.NullJSON
+	if err := row.Column(0, &col); err != nil {
+		return nil, err
+	}
+	jsonBytes, err := col.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	var changeRecordPG changeRecordPostgres
+	if err := json.Unmarshal(jsonBytes, &changeRecordPG); err != nil {
+		return nil, err
+	}
+
+	// Convert to ChangeRecord type.
+	changeRecord := ChangeRecord{
+		DataChangeRecords:      []*DataChangeRecord{},
+		HeartbeatRecords:       []*HeartbeatRecord{},
+		ChildPartitionsRecords: []*ChildPartitionsRecord{},
+	}
+	if changeRecordPG.DataChangeRecord != nil {
+		changeRecord.DataChangeRecords = []*DataChangeRecord{changeRecordPG.DataChangeRecord}
+	}
+	if changeRecordPG.HeartbeatRecord != nil {
+		changeRecord.HeartbeatRecords = []*HeartbeatRecord{changeRecordPG.HeartbeatRecord}
+	}
+	if changeRecordPG.ChildPartitionsRecord != nil {
+		changeRecord.ChildPartitionsRecords = []*ChildPartitionsRecord{changeRecordPG.ChildPartitionsRecord}
+	}
+
+	return &changeRecord, nil
 }
