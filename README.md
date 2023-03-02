@@ -2,7 +2,9 @@
 
 [![run-tests](https://github.com/cloudspannerecosystem/spanner-change-streams-tail/actions/workflows/run-tests.yaml/badge.svg)](https://github.com/cloudspannerecosystem/spanner-change-streams-tail/actions/workflows/run-tests.yaml) [![godoc](https://pkg.go.dev/badge/github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams)](https://pkg.go.dev/github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams)
 
-A handy tool to tail [Cloud Spanner Change Streams](https://cloud.google.com/spanner/docs/change-streams).
+A handy tool to "tail -f" [Cloud Spanner Change Streams](https://cloud.google.com/spanner/docs/change-streams) on the local machine.
+
+Both GoogleSQL and PostgreSQL database dialects are supported.
 
 ## Install
 
