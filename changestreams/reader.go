@@ -125,23 +125,25 @@ type Config struct {
 	// If StartTimestamp is a zero value of time.Time, reader reads from the current timestamp.
 	StartTimestamp time.Time
 	// If EndTimestamp is a zero value of time.Time, reader reads until it is cancelled.
-	EndTimestamp      time.Time
-	HeartbeatInterval time.Duration
+	EndTimestamp         time.Time
+	HeartbeatInterval    time.Duration
+	SpannerClientConfig  spanner.ClientConfig
+	SpannerClientOptions []option.ClientOption
 }
 
 // NewReader creates a new reader.
-func NewReader(ctx context.Context, projectID, instanceID, databaseID, streamID string, opts ...option.ClientOption) (*Reader, error) {
-	return NewReaderWithConfig(ctx, projectID, instanceID, databaseID, streamID, &Config{}, opts...)
+func NewReader(ctx context.Context, projectID, instanceID, databaseID, streamID string) (*Reader, error) {
+	return NewReaderWithConfig(ctx, projectID, instanceID, databaseID, streamID, Config{
+		SpannerClientConfig: spanner.ClientConfig{
+			SessionPoolConfig: spanner.DefaultSessionPoolConfig,
+		},
+	})
 }
 
 // NewReaderWithConfig creates a new reader with a given configuration.
-func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config *Config, opts ...option.ClientOption) (*Reader, error) {
+func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config Config) (*Reader, error) {
 	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
-	client, err := spanner.NewClientWithConfig(ctx, dbPath, spanner.ClientConfig{
-		SessionPoolConfig: spanner.SessionPoolConfig{
-			WriteSessions: 0,
-		},
-	}, opts...)
+	client, err := spanner.NewClientWithConfig(ctx, dbPath, config.SpannerClientConfig, config.SpannerClientOptions...)
 	if err != nil {
 		return nil, err
 	}
