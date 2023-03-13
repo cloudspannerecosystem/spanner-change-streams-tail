@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/spanner"
 	"github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams"
 )
 
@@ -42,6 +43,7 @@ Options:
   -f, --format=                Output format [text|json] (default: text)
       --start=                 Start timestamp with RFC3339 format (default: current timestamp)
       --end=                   End timestamp with RFC3339 format (default: none)
+      --role=                  Database role for fine-grained access control
       --visualize-partitions   Visualize the change stream partitions in Graphviz DOT
 
 Help Options:
@@ -51,9 +53,9 @@ Help Options:
 
 func main() {
 	var (
-		projectID, instanceID, databaseID, streamID, format, start, end string
-		startTimestamp, endTimestamp                                    time.Time
-		verbose, visualizePartitions                                    bool
+		projectID, instanceID, databaseID, streamID, format, start, end, role string
+		startTimestamp, endTimestamp                                          time.Time
+		verbose, visualizePartitions                                          bool
 	)
 
 	// Long options.
@@ -64,6 +66,7 @@ func main() {
 	flag.StringVar(&format, "format", formatText, "")
 	flag.StringVar(&start, "start", "", "")
 	flag.StringVar(&end, "end", "", "")
+	flag.StringVar(&role, "role", "", "")
 	flag.BoolVar(&verbose, "verbose", false, "")
 	flag.BoolVar(&visualizePartitions, "visualize-partitions", false, "")
 
@@ -114,8 +117,12 @@ func main() {
 	config := changestreams.Config{
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   endTimestamp,
+		SpannerClientConfig: spanner.ClientConfig{
+			SessionPoolConfig: spanner.DefaultSessionPoolConfig,
+			DatabaseRole:      role,
+		},
 	}
-	reader, err := changestreams.NewReaderWithConfig(ctx, projectID, instanceID, databaseID, streamID, &config)
+	reader, err := changestreams.NewReaderWithConfig(ctx, projectID, instanceID, databaseID, streamID, config)
 	if err != nil {
 		exitf("failed to create a reader: %v", err)
 	}

@@ -290,7 +290,9 @@ func TestReader(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
-			reader, err := changestreams.NewReader(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID, setupResult.clientOptions...)
+			reader, err := changestreams.NewReaderWithConfig(ctx, testProjectID, testInstanceID, testDatabaseID, setupResult.streamID, changestreams.Config{
+				SpannerClientOptions: setupResult.clientOptions,
+			})
 			if err != nil {
 				t.Fatalf("failed to create a reader: %v", err)
 			}
