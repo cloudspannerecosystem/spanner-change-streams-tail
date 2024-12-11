@@ -208,12 +208,15 @@ func (r *Reader) startRead(ctx context.Context, partitionToken string, startTime
 	switch r.dialect {
 	case dialectGoogleSQL:
 		stmt = spanner.Statement{
-			SQL: fmt.Sprintf("SELECT ChangeRecord FROM READ_%s(@start_timestamp, @end_timestamp, @partition_token, @heartbeat_millis_second)", r.streamID),
+			SQL: fmt.Sprintf("SELECT ChangeRecord FROM READ_%s(@start_timestamp, @end_timestamp, @partition_token, @heartbeat_millis_second, @read_options)", r.streamID),
 			Params: map[string]interface{}{
 				"start_timestamp":         startTimestamp,
 				"end_timestamp":           r.endTimestamp,
 				"partition_token":         partitionToken,
 				"heartbeat_millis_second": r.heartbeatInterval / time.Millisecond,
+				// Set `read_options` to nil to ensure the function call signature is correct
+				// and avoid InvalidArgument errors due to missing or mismatched parameters.
+				"read_options": nil,
 			},
 		}
 		if r.endTimestamp.IsZero() {
