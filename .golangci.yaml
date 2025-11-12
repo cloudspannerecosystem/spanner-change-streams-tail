@@ -1,0 +1,38 @@
+version: "2"
+run:
+  allow-parallel-runners: true
+linters:
+  disable:
+    - "errcheck"
+  enable:
+    - "bidichk"
+    - "bodyclose"
+    - "errname"
+    - "errorlint"
+    - "gocritic"
+    - "goprintffuncname"
+    - "gosec"
+    - "govet"
+    - "importas"
+    - "ineffassign"
+    - "makezero"
+    - "perfsprint"
+    - "prealloc"
+    - "predeclared"
+    - "promlinter"
+    - "revive"
+    - "spancheck"
+    - "staticcheck"
+    - "tagalign"
+    - "testifylint"
+    - "tparallel"
+    - "unconvert"
+    - "usetesting"
+    - "wastedassign"
+    - "whitespace"
+    - "unused"
+  settings:
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1019"

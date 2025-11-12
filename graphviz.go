@@ -116,7 +116,7 @@ func (v *PartitionVisualizer) Draw() {
 }
 
 func sortPartitions(partitionsMap map[string]*Partition) []*Partition {
-	var partitions []*Partition
+	partitions := make([]*Partition, 0, len(partitionsMap))
 	for _, p := range partitionsMap {
 		partitions = append(partitions, p)
 	}

@@ -39,7 +39,7 @@ const (
 	envTestProjectID        = "TEST_PROJECT_ID"
 	envTestInstanceID       = "TEST_INSTANCE_ID"
 	envTestDatabaseID       = "TEST_DATABASE_ID"
-	envTestCredentialBase64 = "TEST_CREDENTIAL_BASE64"
+	envTestCredentialBase64 = "TEST_CREDENTIAL_BASE64" // nolint:gosec
 	timeoutPerTest          = time.Minute * 3
 )
 
@@ -95,19 +95,19 @@ func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 	if testCredentialBase64 != "" {
 		credential, err := base64.StdEncoding.DecodeString(testCredentialBase64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid base64 encoded credential: %v", err)
+			return nil, fmt.Errorf("invalid base64 encoded credential: %w", err)
 		}
 		options = append(options, option.WithCredentialsJSON(credential))
 	}
 	adminClient, err := adminapi.NewDatabaseAdminClient(ctx, options...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create an admin client: %v", err)
+		return nil, fmt.Errorf("failed to create an admin client: %w", err)
 	}
 
 	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", testProjectID, testInstanceID, testDatabaseID)
 	client, err := spanner.NewClient(ctx, dbPath, options...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create a client: %v", err)
+		return nil, fmt.Errorf("failed to create a client: %w", err)
 	}
 
 	tableID := generateUniqueTableID()
@@ -126,10 +126,10 @@ func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 		Statements: []string{tableDDL, streamDDL},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to update database DDL: %v", err)
+		return nil, fmt.Errorf("failed to update database DDL: %w", err)
 	}
 	if err := op.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("failed to update database DDL: %v", err)
+		return nil, fmt.Errorf("failed to update database DDL: %w", err)
 	}
 	t.Logf("Created table %q and stream %q", tableID, streamID)
 
@@ -139,15 +139,15 @@ func setup(ctx context.Context, t *testing.T) (*setupResult, error) {
 			Statements: []string{
 				// Change stream must be dropped first before dropping a watched table.
 				// Otherwise, FailedPrecondition error happens.
-				fmt.Sprintf("DROP CHANGE STREAM %s", streamID),
-				fmt.Sprintf("DROP TABLE %s", tableID),
+				"DROP CHANGE STREAM " + streamID,
+				"DROP TABLE " + tableID,
 			},
 		})
 		if err != nil {
-			return fmt.Errorf("failed to update database DDL: %v", err)
+			return fmt.Errorf("failed to update database DDL: %w", err)
 		}
 		if err := op.Wait(ctx); err != nil {
-			return fmt.Errorf("failed to update database DDL: %v", err)
+			return fmt.Errorf("failed to update database DDL: %w", err)
 		}
 		t.Logf("Deleted table %q and stream %q", tableID, streamID)
 		return nil
@@ -301,9 +301,7 @@ func TestReader(t *testing.T) {
 			var records []*changestreams.DataChangeRecord
 			go reader.Read(readerContext, func(result *changestreams.ReadResult) error {
 				for _, changeRecord := range result.ChangeRecords {
-					for _, r := range changeRecord.DataChangeRecords {
-						records = append(records, r)
-					}
+					records = append(records, changeRecord.DataChangeRecords...)
 				}
 				return nil
 			})

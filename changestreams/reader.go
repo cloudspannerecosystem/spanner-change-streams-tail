@@ -32,71 +32,71 @@ import (
 // ReadResult is the result of the read change records from the partition.
 type ReadResult struct {
 	PartitionToken string          `json:"partition_token"`
-	ChangeRecords  []*ChangeRecord `spanner:"ChangeRecord" json:"change_record"`
+	ChangeRecords  []*ChangeRecord `json:"change_record"   spanner:"ChangeRecord"`
 }
 
 // ChangeRecord is the single unit of the records from the change stream.
 type ChangeRecord struct {
-	DataChangeRecords      []*DataChangeRecord      `spanner:"data_change_record" json:"data_change_record"`
-	HeartbeatRecords       []*HeartbeatRecord       `spanner:"heartbeat_record" json:"heartbeat_record"`
-	ChildPartitionsRecords []*ChildPartitionsRecord `spanner:"child_partitions_record" json:"child_partitions_record"`
+	DataChangeRecords      []*DataChangeRecord      `json:"data_change_record"      spanner:"data_change_record"`
+	HeartbeatRecords       []*HeartbeatRecord       `json:"heartbeat_record"        spanner:"heartbeat_record"`
+	ChildPartitionsRecords []*ChildPartitionsRecord `json:"child_partitions_record" spanner:"child_partitions_record"`
 }
 
 // DataChangeRecord contains a set of changes to the table.
 type DataChangeRecord struct {
-	CommitTimestamp                      time.Time     `spanner:"commit_timestamp" json:"commit_timestamp"`
-	RecordSequence                       string        `spanner:"record_sequence" json:"record_sequence"`
-	ServerTransactionID                  string        `spanner:"server_transaction_id" json:"server_transaction_id"`
-	IsLastRecordInTransactionInPartition bool          `spanner:"is_last_record_in_transaction_in_partition" json:"is_last_record_in_transaction_in_partition"`
-	TableName                            string        `spanner:"table_name" json:"table_name"`
-	ColumnTypes                          []*ColumnType `spanner:"column_types" json:"column_types"`
-	Mods                                 []*Mod        `spanner:"mods" json:"mods"`
-	ModType                              string        `spanner:"mod_type" json:"mod_type"`
-	ValueCaptureType                     string        `spanner:"value_capture_type" json:"value_capture_type"`
-	NumberOfRecordsInTransaction         int64         `spanner:"number_of_records_in_transaction" json:"number_of_records_in_transaction"`
-	NumberOfPartitionsInTransaction      int64         `spanner:"number_of_partitions_in_transaction" json:"number_of_partitions_in_transaction"`
-	TransactionTag                       string        `spanner:"transaction_tag" json:"transaction_tag"`
-	IsSystemTransaction                  bool          `spanner:"is_system_transaction" json:"is_system_transaction"`
+	CommitTimestamp                      time.Time     `json:"commit_timestamp"                           spanner:"commit_timestamp"`
+	RecordSequence                       string        `json:"record_sequence"                            spanner:"record_sequence"`
+	ServerTransactionID                  string        `json:"server_transaction_id"                      spanner:"server_transaction_id"`
+	IsLastRecordInTransactionInPartition bool          `json:"is_last_record_in_transaction_in_partition" spanner:"is_last_record_in_transaction_in_partition"`
+	TableName                            string        `json:"table_name"                                 spanner:"table_name"`
+	ColumnTypes                          []*ColumnType `json:"column_types"                               spanner:"column_types"`
+	Mods                                 []*Mod        `json:"mods"                                       spanner:"mods"`
+	ModType                              string        `json:"mod_type"                                   spanner:"mod_type"`
+	ValueCaptureType                     string        `json:"value_capture_type"                         spanner:"value_capture_type"`
+	NumberOfRecordsInTransaction         int64         `json:"number_of_records_in_transaction"           spanner:"number_of_records_in_transaction"`
+	NumberOfPartitionsInTransaction      int64         `json:"number_of_partitions_in_transaction"        spanner:"number_of_partitions_in_transaction"`
+	TransactionTag                       string        `json:"transaction_tag"                            spanner:"transaction_tag"`
+	IsSystemTransaction                  bool          `json:"is_system_transaction"                      spanner:"is_system_transaction"`
 }
 
 // ColumnType is the metadata of the column.
 type ColumnType struct {
-	Name            string           `spanner:"name" json:"name"`
-	Type            spanner.NullJSON `spanner:"type" json:"type"`
-	IsPrimaryKey    bool             `spanner:"is_primary_key" json:"is_primary_key"`
-	OrdinalPosition int64            `spanner:"ordinal_position" json:"ordinal_position"`
+	Name            string           `json:"name"             spanner:"name"`
+	Type            spanner.NullJSON `json:"type"             spanner:"type"`
+	IsPrimaryKey    bool             `json:"is_primary_key"   spanner:"is_primary_key"`
+	OrdinalPosition int64            `json:"ordinal_position" spanner:"ordinal_position"`
 }
 
 // Mod is the changes that were made on the table.
 type Mod struct {
-	Keys      spanner.NullJSON `spanner:"keys" json:"keys"`
-	NewValues spanner.NullJSON `spanner:"new_values" json:"new_values"`
-	OldValues spanner.NullJSON `spanner:"old_values" json:"old_values"`
+	Keys      spanner.NullJSON `json:"keys"       spanner:"keys"`
+	NewValues spanner.NullJSON `json:"new_values" spanner:"new_values"`
+	OldValues spanner.NullJSON `json:"old_values" spanner:"old_values"`
 }
 
 // HeartbeatRecord is the heartbeat record returned from Cloud Spanner.
 type HeartbeatRecord struct {
-	Timestamp time.Time `spanner:"timestamp" json:"timestamp"`
+	Timestamp time.Time `json:"timestamp" spanner:"timestamp"`
 }
 
 // ChildPartitionsRecord contains the child partitions of the stream.
 type ChildPartitionsRecord struct {
-	StartTimestamp  time.Time         `spanner:"start_timestamp" json:"start_timestamp"`
-	RecordSequence  string            `spanner:"record_sequence" json:"record_sequence"`
-	ChildPartitions []*ChildPartition `spanner:"child_partitions" json:"child_partitions"`
+	StartTimestamp  time.Time         `json:"start_timestamp"  spanner:"start_timestamp"`
+	RecordSequence  string            `json:"record_sequence"  spanner:"record_sequence"`
+	ChildPartitions []*ChildPartition `json:"child_partitions" spanner:"child_partitions"`
 }
 
 // ChildPartition contains the child partition token.
 type ChildPartition struct {
-	Token                 string   `spanner:"token" json:"token"`
-	ParentPartitionTokens []string `spanner:"parent_partition_tokens" json:"parent_partition_tokens"`
+	Token                 string   `json:"token"                   spanner:"token"`
+	ParentPartitionTokens []string `json:"parent_partition_tokens" spanner:"parent_partition_tokens"`
 }
 
 // changeRecordPostgres is an interim struct to decode change stream result for PostgreSQL.
 type changeRecordPostgres struct {
-	DataChangeRecord      *DataChangeRecord      `spanner:"data_change_record" json:"data_change_record"`
-	HeartbeatRecord       *HeartbeatRecord       `spanner:"heartbeat_record" json:"heartbeat_record"`
-	ChildPartitionsRecord *ChildPartitionsRecord `spanner:"child_partitions_record" json:"child_partitions_record"`
+	DataChangeRecord      *DataChangeRecord      `json:"data_change_record"      spanner:"data_change_record"`
+	HeartbeatRecord       *HeartbeatRecord       `json:"heartbeat_record"        spanner:"heartbeat_record"`
+	ChildPartitionsRecord *ChildPartitionsRecord `json:"child_partitions_record" spanner:"child_partitions_record"`
 }
 
 type partitionState int

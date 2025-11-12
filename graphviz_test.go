@@ -138,7 +138,10 @@ func TestPartitionVisualizer(t *testing.T) {
 			var out bytes.Buffer
 			visualizer := NewPartitionVisualizer(&out)
 			for _, r := range test.readResults {
-				visualizer.Read(r)
+				err := visualizer.Read(r)
+				if err != nil {
+					t.Fatalf("Read failed with error: %v", err)
+				}
 			}
 			visualizer.Draw()
 
