@@ -115,7 +115,7 @@ type Reader struct {
 	endTimestamp      time.Time
 	heartbeatInterval time.Duration
 	dialect           dialect
-	states            map[string]partitionState
+	states            sync.Map
 	group             *errgroup.Group
 	mu                sync.Mutex
 }
@@ -165,7 +165,7 @@ func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID,
 		endTimestamp:      config.EndTimestamp,
 		heartbeatInterval: heartbeatInterval,
 		dialect:           dialect,
-		states:            make(map[string]partitionState),
+		states:            sync.Map{},
 	}, nil
 }
 
@@ -174,7 +174,8 @@ func (r *Reader) Close() {
 	r.client.Close()
 }
 
-// Read starts reading the change stream.
+// Read starts reading the change stream and calls the function f on every result.
+// You can ignore the ChildPartitionsRecords because they are processed here.
 //
 // If function f returns an error, Read finishes the process and returns the error.
 // Once this method is called, reader must not be reused in any other places (i.e. not reentrant).
@@ -281,12 +282,10 @@ func (r *Reader) startRead(ctx context.Context, partitionToken string, startTime
 		// childStartTimestamp is always later than r.startTimestamp.
 		childStartTimestamp := childPartitionsRecord.StartTimestamp
 		for _, childPartition := range childPartitionsRecord.ChildPartitions {
-			if r.canReadChild(childPartition) {
-				partition := childPartition
-				r.group.Go(func() error {
-					return r.startRead(ctx, partition.Token, childStartTimestamp, f)
-				})
-			}
+			r.group.Go(func() error {
+				r.waitUntilCanReadChild(childPartition)
+				return r.startRead(ctx, childPartition.Token, childStartTimestamp, f)
+			})
 		}
 	}
 
@@ -294,34 +293,33 @@ func (r *Reader) startRead(ctx context.Context, partitionToken string, startTime
 }
 
 func (r *Reader) markStateReading(partitionToken string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, ok := r.states[partitionToken]; ok {
+	if _, ok := r.states.Load(partitionToken); ok {
 		// Already started by another parent.
 		return false
 	}
-	r.states[partitionToken] = partitionStateReading
+	r.states.Store(partitionToken, partitionStateReading)
 	return true
 }
 
 func (r *Reader) markStateFinished(partitionToken string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.states[partitionToken] = partitionStateFinished
+	r.states.Store(partitionToken, partitionStateFinished)
 }
 
-func (r *Reader) canReadChild(partition *ChildPartition) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, parent := range partition.ParentPartitionTokens {
-		if r.states[parent] != partitionStateFinished {
-			return false
+func (r *Reader) waitUntilCanReadChild(partition *ChildPartition) {
+	for {
+		allDone := true
+		for _, parent := range partition.ParentPartitionTokens {
+			state, _ := r.states.Load(parent)
+			if state != partitionStateFinished {
+				allDone = false
+				break
+			}
 		}
+		if allDone {
+			return
+		}
+		// ideally sleep a bit or wait on a cond, otherwise this spins forever
 	}
-	return true
 }
 
 func decodePostgresRow(row *spanner.Row) (*ChangeRecord, error) {
