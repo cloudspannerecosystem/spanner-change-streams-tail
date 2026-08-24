@@ -17,6 +17,8 @@
 /*
 Package changestreams provides the functionality for reading the Cloud Spanner change streams.
 
+This package is alpha-level quality. Do not use it in production.
+
 # Example
 
 	package main

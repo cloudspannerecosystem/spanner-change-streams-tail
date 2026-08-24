@@ -231,10 +231,12 @@ This repository also has `changestreams` package that can be used as a Go librar
 Go application. You can get more details from
 the [Godoc](https://pkg.go.dev/github.com/cloudspannerecosystem/spanner-change-streams-tail/changestreams).
 
-Note that `changestreams` package has limited scalability. If you need more scalable, reliable solution, you can use an
+Note that `changestreams` package is alpha-level quality and never for production. For more reliable solution, please use an
 official [Dataflow connector](https://cloud.google.com/spanner/docs/change-streams/use-dataflow).
 
 ## Disclaimer
+
+This CLI and Go library are alpha-level quality. Do not use it in production.
 
 Please feel free to report issues and send pull requests, but note that this application is not officially supported as
 part of the Cloud Spanner product.
