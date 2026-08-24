@@ -6,6 +6,8 @@ A handy tool to "tail -f" [Cloud Spanner Change Streams](https://cloud.google.co
 
 Both GoogleSQL and PostgreSQL database dialects are supported.
 
+Note that the CLI and Go library are alpha-level quality. Do not use them in production.
+
 ## Install
 
 ```bash
