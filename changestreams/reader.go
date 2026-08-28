@@ -154,6 +154,7 @@ const (
 // Reader is the change stream reader.
 type Reader struct {
 	client            *spanner.Client
+	ownsClient        bool
 	streamID          string
 	startTimestamp    time.Time
 	endTimestamp      time.Time
@@ -170,8 +171,11 @@ type Config struct {
 	// If StartTimestamp is a zero value of time.Time, reader reads from the current timestamp.
 	StartTimestamp time.Time
 	// If EndTimestamp is a zero value of time.Time, reader reads until it is cancelled.
-	EndTimestamp         time.Time
-	HeartbeatInterval    time.Duration
+	EndTimestamp      time.Time
+	HeartbeatInterval time.Duration
+	// SpannerClient, if set, is reused instead of creating a new *spanner.Client.
+	// The caller keeps ownership of it: Close does not close a client provided this way.
+	SpannerClient        *spanner.Client
 	SpannerClientConfig  spanner.ClientConfig
 	SpannerClientOptions []option.ClientOption
 }
@@ -187,10 +191,16 @@ func NewReader(ctx context.Context, projectID, instanceID, databaseID, streamID 
 
 // NewReaderWithConfig creates a new reader with a given configuration.
 func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID, streamID string, config Config) (*Reader, error) {
-	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
-	client, err := spanner.NewClientWithConfig(ctx, dbPath, config.SpannerClientConfig, config.SpannerClientOptions...)
-	if err != nil {
-		return nil, err
+	client := config.SpannerClient
+	ownsClient := false
+	if client == nil {
+		dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectID, instanceID, databaseID)
+		var err error
+		client, err = spanner.NewClientWithConfig(ctx, dbPath, config.SpannerClientConfig, config.SpannerClientOptions...)
+		if err != nil {
+			return nil, err
+		}
+		ownsClient = true
 	}
 
 	dialect, err := detectDialect(ctx, client)
@@ -210,6 +220,7 @@ func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID,
 
 	return &Reader{
 		client:            client,
+		ownsClient:        ownsClient,
 		streamID:          streamID,
 		startTimestamp:    config.StartTimestamp,
 		endTimestamp:      config.EndTimestamp,
@@ -221,8 +232,13 @@ func NewReaderWithConfig(ctx context.Context, projectID, instanceID, databaseID,
 }
 
 // Close closes the reader.
+//
+// If the reader was created with an externally provided Config.SpannerClient,
+// Close does not close that client — the caller retains ownership of it.
 func (r *Reader) Close() {
-	r.client.Close()
+	if r.ownsClient {
+		r.client.Close()
+	}
 }
 
 // Read starts reading the change stream.
